@@ -4,6 +4,12 @@ import sys
 import math
 import random
 
+"""
+ISSUES:
+1. 如果三角形的一部分在视野后方，如何处理？
+2. 如果三角形的一部分在视野前方，但超出视野过多，会很占用资源，可以计算与显示器边缘的交点，然后绘制新得到的多边形...
+"""
+
 
 def get_camera(position, target, fov_h=0.4 * math.pi, fov_v=0.4 * math.pi):
     """
@@ -84,6 +90,37 @@ class Triangle:
         self.line_color = line_color
         self.surface_color = surface_color
 
+class McStyleCube:
+    # MineCraft风格的方块类，本质上是12个Triangle的组合
+    def __init__(self, position, surface_color, line_color=(255,255,255), size=1):
+        """
+        :param position: (x,y,z): 表示了一个[x,y,z]->[x+size,y+size,z+size]的正方体
+        :param surface_color: color[r,g,b] of [xp,xn,yp,yn,zp,zn] (目前只支持六个面同色)
+        :param line_color: 边框颜色,默认为白色
+        :param size: 方块大小, 默认就是1, 最好不要改
+        """
+        self.pos = position
+        self.size = size
+        self.surface_color = surface_color
+        self.line_color = line_color
+        x, y, z = position
+        posA = x,y,z
+        posB = x+size,y,z
+        posC = x+size,y+size,z
+        posD = x,y+size,z
+        posE = x,y,z+size
+        posF = x+size,y,z+size
+        posG = x+size,y+size,z+size
+        posH = x,y+size,z+size
+        self.triangles = [ # 这里三角形的三个顶点要满足第三个点和第一个点的连线是正方形的对角线！
+            Triangle(posA, posE, posF, line_color, surface_color), Triangle(posA, posB, posF, line_color, surface_color),
+            Triangle(posE, posA, posD, line_color, surface_color), Triangle(posE, posH, posD, line_color, surface_color),
+            Triangle(posA, posB, posC, line_color, surface_color), Triangle(posA, posD, posC, line_color, surface_color),
+            Triangle(posB, posC, posG, line_color, surface_color), Triangle(posB, posF, posG, line_color, surface_color),
+            Triangle(posE, posF, posG, line_color, surface_color), Triangle(posE, posH, posG, line_color, surface_color),
+            Triangle(posC, posD, posH, line_color, surface_color), Triangle(posC, posG, posH, line_color, surface_color),
+        ]
+
 
 # 颜色
 BLACK = (0, 0, 0)
@@ -114,7 +151,7 @@ CAPTION = "3D_Simple_Demo"
 
 items = []
 items.append(Triangle([1,0,0], [0,1,0], [0,0,1], BLACK, RED)) # 边框为黑色，填充红色的R^3中三角形
-# 三角形如果有一部分在视野后方的解决方案还没有思路 先考虑最简单的Point的情况吧...
+#! 三角形如果有一部分在视野后方的解决方案还没有思路...
 
 # 生成一个点阵正方体
 X, Y, Z = 11, 11, 1
@@ -126,6 +163,17 @@ for i in range(X):
 for i in range(0, 10):
     for j in range(0, 10):
         items.append(Point([i, j, 0], [255, 255, 255]))
+
+# 生成mc风格方块
+items.append(McStyleCube((0,0,0),WHITE))
+items.append(McStyleCube((1,0,0),RED))
+items.append(McStyleCube((0,1,0),GREEN))
+items.append(McStyleCube((0,0,1),BLUE))
+
+
+
+
+
 
 
 # (0,1)×(0,1) -> (-WIN_SIZE[0], WIN_SIZE[0])×(-WIN_SIZE[1], WIN_SIZE[1])
@@ -141,7 +189,6 @@ screen = pygame.display.set_mode(WIN_SIZE)
 pygame.display.set_caption(CAPTION)
 
 clock = pygame.time.Clock()
-pygame.event.set_grab(False)
 pygame.mouse.set_visible(False)
 pygame.mouse.set_pos(WIN_SIZE[0] / 2, WIN_SIZE[1] / 2)
 CENTER_POS = (WIN_SIZE[0] / 2, WIN_SIZE[1] / 2)
@@ -240,7 +287,6 @@ while True:
                 # 填充内部
                 if item.surface_color:
                     pygame.draw.polygon(screen, item.surface_color, [A_pos, B_pos, C_pos])
-
         elif type(item) == Point:
             # 如果太远了就不绘制了
             if item.calc_dist([pos_x, pos_y, pos_z]) > 200:
@@ -250,6 +296,22 @@ while True:
             # 在视野内则绘制
             if pos:
                 pygame.draw.circle(screen, item.color, pos, 3)
+        elif type(item) == McStyleCube:
+            for tri in item.triangles:
+                # 先计算三个顶点在 Screen_Space 的坐标
+                A_pos = adapt(cam(tri.pos_A))
+                B_pos = adapt(cam(tri.pos_B))
+                C_pos = adapt(cam(tri.pos_C))
+                # 顶点全部合法才绘制
+                if A_pos and B_pos and C_pos:
+                    # 绘制边框线
+                    pygame.draw.aaline(screen, tri.line_color, A_pos, B_pos)
+                    pygame.draw.aaline(screen, tri.line_color, B_pos, C_pos)
+                    # 填色
+                    pygame.draw.polygon(screen, tri.surface_color, [A_pos, B_pos, C_pos])
+
+
+
 
     pygame.display.flip()
 
