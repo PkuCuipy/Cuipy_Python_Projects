@@ -16,8 +16,9 @@ import random
     1. 使用f2i函数, 将float规范为int, 增加兼容性
     2. adapt函数更名为Cl2Sc 表示从Clip_Space([-1,1]x[-1,1])到Screen_Space空间 的坐标伸缩变换
     3. 增加render_queue 并激活camera的返回值'depth', 现在可以按深度顺序渲染了!
-    4. 增加帧率显示
+    4. 屏幕左上角增加帧率、位置信息、视角信息、按键提示的显示
     5. 增加surface渲染开关, 可以通过"-"键 开启/关闭 "面"的渲染
+    
     
 """
 
@@ -422,9 +423,16 @@ while True:
 
     # 屏幕左上角打印帧率
     fps_text = my_font.render(str(int(clock.get_fps() + 0.5)), True, WHITE)
-    help_text = my_font.render("              \"W/S/A/D\"; \"C\"; \"=\"; \"-\";  ", True, WHITE)
+    help_text = my_font.render("\"W/S/A/D\"; \"C\"; \"=\"; \"-\";  ", True, WHITE)
+    pos_text = my_font.render(f"position: x={round(pos_x, 3)}, y={round(pos_y, 3)}, z={round(pos_z, 3)}", True, WHITE)
+
+    angle_text = my_font.render(f"look_at: φ={round(phi / math.pi, 3)}π, θ={round(theta / math.pi, 3)}π", True, WHITE)
+
     screen.blit(fps_text, (10, 10))
-    screen.blit(help_text, (10, 10))
+    screen.blit(help_text, (10, 40))
+    screen.blit(pos_text, (10, 70))
+    screen.blit(angle_text, (10, 100))
+
 
 
     pygame.display.flip()
