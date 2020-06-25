@@ -5,10 +5,20 @@ import math
 import random
 
 """
-ISSUES:
-1. 如果三角形的一部分在视野后方，如何处理？
-2. 如果三角形的一部分在视野前方，但超出视野过多，会很占用资源，可以计算与显示器边缘的交点，然后绘制新得到的多边形...
+问题日志:
+[6.22]
+    1. 如果三角形的一部分在视野后方，如何处理？
+    2. 如果三角形的一部分在视野前方，但超出视野过多，会很占用资源，可以计算与显示器边缘的交点，然后绘制新得到的多边形...
+    3. 我们可以给三角形用右手定则定义"正方向向量". 对于组成一个正方体的12个三角形而言，我们只需要渲染正方向向量和视线方向点积<0的
+
+更新日志:
+[6.25]
+    1. 使用f2i函数, 将float规范为int, 增加兼容性
+    2. adapt函数更名为Cl2Sc 表示从Clip_Space([-1,1]x[-1,1])到Screen_Space空间 的坐标伸缩变换
+    
+    
 """
+
 
 
 def get_camera(position, target, fov_h=0.4 * math.pi, fov_v=0.4 * math.pi):
@@ -52,46 +62,78 @@ def get_camera(position, target, fov_h=0.4 * math.pi, fov_v=0.4 * math.pi):
         #     # print(round(u_), round(v_), "（超出视野）")
         #     return None
 
-        # 超出视野"过多",则返回None
-        if abs(u_) > 10 or abs(v_) > 10:
+        # 超出视野"过多(>5)",则返回None
+        if abs(u_) > 5 or abs(v_) > 5:
             # print(round(u_), round(v_), "（超出视野）")
             return None
-
 
         return u_, v_
 
     return camera
 
 
-class Point:
-    def __init__(self, position, color, movable=False, speed_vec=None):
-        self.pos = position
-        self.color = color
-        self.movable = movable
-        self.speed_vec = speed_vec
 
-    def calc_dist(self, pos):
-        return math.sqrt((self.pos[0] - pos[0]) ** 2 + (self.pos[1] - pos[1]) ** 2 + (self.pos[2] - pos[2]) ** 2)
+"""
+基础空间图形类:
+(坐标采用高中数学定义的右手系, z轴向上)
+Point: 空间点
+Line: 空间线段
+Triangle: 空间三角形
+"""
+class Point:
+    def __init__(self, pos, color):
+        self.pos = pos
+        self.color = color
+
+
+class Line:
+    def __init__(self, A_pos, B_pos, color, width = 1):
+        self.A_pos = A_pos
+        self.B_pos = B_pos
+        self.color = color
+        self.center_pos = [(A_pos[_] + B_pos[_]) / 2 for _ in range(3)] # 重心
 
 
 class Triangle:
-    def __init__(self, pos_A, pos_B, pos_C, line_color, surface_color):
-        """
-        :param pos_A: [A_x, A_y, A_z]
-        :param pos_B: [B_x, B_y, B_z]
-        :param pos_C: [C_x, C_y, C_z]
-        :param line_color: AB/BC/CA 线段颜色 (r,g,b) 或 None
-        :param surface_color: ∆ABC 填充色 (r,g,b) 或 None
-        [注]: 采用 x-y-z空间坐标系 即高中数学中定义的右手笛卡尔系
-        """
-        self.pos_A = pos_A
-        self.pos_B = pos_B
-        self.pos_C = pos_C
-        self.line_color = line_color
-        self.surface_color = surface_color
+    def __init__(self, A_pos, B_pos, C_pos, color):
+        self.A_pos = A_pos
+        self.B_pos = B_pos
+        self.C_pos = C_pos
+        self.color = color
+        self.center_pos = [(A_pos[_] + B_pos[_] + C_pos[_]) / 3 for _ in range(3)] # 重心
+
+
+"""
+用于渲染的2D的 ScreenSpace 的点、线段和三角形
+采用PyGame的2D坐标系: x右 y下
+
+"""
+class SSPoint:
+    def __init__(self, pos, color, depth):
+        self.pos = pos
+        self.color = color
+        self.depth = depth
+
+class SSLine:
+    def __init__(self, A_pos, B_pos, color, depth, width=1):
+        self.A_pos = A_pos
+        self.B_pos = B_pos
+        self.color = color
+        self.width = width
+        self.depth = depth
+
+
+class SSTriangle:
+    def __init__(self, A_pos, B_pos, C_pos, color, depth):
+        self.A_pos = A_pos
+        self.B_pos = B_pos
+        self.C_pos = C_pos
+        self.color = color
+        self.depth = depth
+
 
 class McStyleCube:
-    # MineCraft风格的方块类，本质上是12个Triangle的组合
+    # MineCraft风格的方块类，本质上是12个Triangle和12个Line的组合
     def __init__(self, position, surface_color, line_color=(255,255,255), size=1):
         """
         :param position: (x,y,z): 表示了一个[x,y,z]->[x+size,y+size,z+size]的正方体
@@ -104,30 +146,40 @@ class McStyleCube:
         self.surface_color = surface_color
         self.line_color = line_color
         x, y, z = position
-        posA = x,y,z
-        posB = x+size,y,z
-        posC = x+size,y+size,z
-        posD = x,y+size,z
-        posE = x,y,z+size
-        posF = x+size,y,z+size
-        posG = x+size,y+size,z+size
-        posH = x,y+size,z+size
+        posA = (x,y,z)
+        posB = (x+size,y,z)
+        posC = (x+size,y+size,z)
+        posD = (x,y+size,z)
+        posE = (x,y,z+size)
+        posF = (x+size,y,z+size)
+        posG = (x+size,y+size,z+size)
+        posH = (x,y+size,z+size)
         self.triangles = [ # 这里三角形的三个顶点要满足第三个点和第一个点的连线是正方形的对角线！
-            Triangle(posA, posE, posF, line_color, surface_color), Triangle(posA, posB, posF, line_color, surface_color),
-            Triangle(posE, posA, posD, line_color, surface_color), Triangle(posE, posH, posD, line_color, surface_color),
-            Triangle(posA, posB, posC, line_color, surface_color), Triangle(posA, posD, posC, line_color, surface_color),
-            Triangle(posB, posC, posG, line_color, surface_color), Triangle(posB, posF, posG, line_color, surface_color),
-            Triangle(posE, posF, posG, line_color, surface_color), Triangle(posE, posH, posG, line_color, surface_color),
-            Triangle(posC, posD, posH, line_color, surface_color), Triangle(posC, posG, posH, line_color, surface_color),
+            Triangle(posA, posE, posF, surface_color), Triangle(posA, posB, posF, surface_color),
+            Triangle(posE, posA, posD, surface_color), Triangle(posE, posH, posD, surface_color),
+            Triangle(posA, posB, posC, surface_color), Triangle(posA, posD, posC, surface_color),
+            Triangle(posB, posC, posG, surface_color), Triangle(posB, posF, posG, surface_color),
+            Triangle(posE, posF, posG, surface_color), Triangle(posE, posH, posG, surface_color),
+            Triangle(posC, posD, posH, surface_color), Triangle(posC, posG, posH, surface_color),
         ]
+        self.lines = [
+            Line(posA, posB, line_color), Line(posB, posC, line_color), Line(posC, posD, line_color), Line(posD, posA, line_color),
+            Line(posE, posF, line_color), Line(posF, posG, line_color), Line(posG, posH, line_color), Line(posH, posE, line_color),
+            Line(posA, posE, line_color), Line(posB, posF, line_color), Line(posC, posG, line_color), Line(posD, posH, line_color),
+        ]
+
+
+
 
 
 # 颜色
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
+GRAY = GREY = (128, 128, 128)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
+
 # 位置
 pos_x, pos_y, pos_z = -1, -1, 0
 # 垂直升降速度
@@ -149,48 +201,55 @@ FOV_V = 0.4 * math.pi
 WIN_SIZE = 1000, 700
 CAPTION = "3D_Simple_Demo"
 
-items = []
-items.append(Triangle([1,0,0], [0,1,0], [0,0,1], BLACK, RED)) # 边框为黑色，填充红色的R^3中三角形
-#! 三角形如果有一部分在视野后方的解决方案还没有思路...
+
+
+
+items = [] # 空间物体集合
 
 # 生成一个点阵正方体
-X, Y, Z = 11, 11, 1
+X, Y, Z = 11, 11, 11
 for i in range(X):
     for j in range(Y):
         for k in range(Z):
             items.append(Point([i / 10, j / 10, k / 10], [i * 255 // X, j * 255 // Y, k * 255 // Z]))
 # 生成地面
-for i in range(0, 10):
-    for j in range(0, 10):
+for i in range(0, 30):
+    for j in range(0, 30):
         items.append(Point([i, j, 0], [255, 255, 255]))
 
 # 生成mc风格方块
-items.append(McStyleCube((0,0,0),WHITE))
-items.append(McStyleCube((1,0,0),RED))
-items.append(McStyleCube((0,1,0),GREEN))
-items.append(McStyleCube((0,0,1),BLUE))
+items.append(McStyleCube((10,10,0),WHITE))
+items.append(McStyleCube((10,10,1),GREY))
+items.append(McStyleCube((10,10,2),WHITE))
+items.append(McStyleCube((11,10,0),RED))
+items.append(McStyleCube((10,12,0),GREEN))
+items.append(McStyleCube((10,12,1),BLUE))
 
 
 
 
-
-
+# 将float四舍五入为int
+def f2i(x: float) -> int:
+    return int(x + 0.5)
 
 # (0,1)×(0,1) -> (-WIN_SIZE[0], WIN_SIZE[0])×(-WIN_SIZE[1], WIN_SIZE[1])
-def adapt(pos):
+def Cl2Sc(pos):
     if pos:
         x, y = pos
-        return x * WIN_SIZE[0] / 2 + WIN_SIZE[0] / 2, y * (-WIN_SIZE[1] / 2) + WIN_SIZE[1] / 2
+        return f2i(x * WIN_SIZE[0] / 2 + WIN_SIZE[0] / 2), f2i(y * (-WIN_SIZE[1] / 2) + WIN_SIZE[1] / 2)
     return None
 
 
-pygame.init()
-screen = pygame.display.set_mode(WIN_SIZE)
-pygame.display.set_caption(CAPTION)
 
-clock = pygame.time.Clock()
-pygame.mouse.set_visible(False)
-pygame.mouse.set_pos(WIN_SIZE[0] / 2, WIN_SIZE[1] / 2)
+
+
+pygame.init() # 初始化pygame
+screen = pygame.display.set_mode(WIN_SIZE) # 设置窗口大小
+pygame.display.set_caption(CAPTION) # 设置标题
+
+clock = pygame.time.Clock() # 计时器
+pygame.mouse.set_visible(False) # 鼠标不可见
+pygame.mouse.set_pos(f2i(WIN_SIZE[0] / 2), f2i(WIN_SIZE[1] / 2)) # 鼠标初始位置
 CENTER_POS = (WIN_SIZE[0] / 2, WIN_SIZE[1] / 2)
 
 while True:
@@ -214,7 +273,7 @@ while True:
     else:
         phi = max(phi + mouse_speed_phi * mouse_move_delta[1], 0.000001 * math.pi)
     # 鼠标位置reset
-    pygame.mouse.set_pos(WIN_SIZE[0] / 2, WIN_SIZE[1] / 2)
+    pygame.mouse.set_pos(f2i(WIN_SIZE[0] / 2), f2i(WIN_SIZE[1] / 2))
 
     # 持续性键盘事件
     key_pressed = pygame.key.get_pressed()
@@ -270,45 +329,51 @@ while True:
     target_c = math.cos(phi)
     cam = get_camera([pos_x, pos_y, pos_z], [target_a, target_b, target_c], fov_h=FOV_H, fov_v=FOV_V)
 
-    # 遍历空间中的物体, 计算其在光屏的坐标, 按比例放大后绘制,
+
+    # 遍历空间中的物体, 将确保合法的、需要绘制的点、线段和三角形添加进渲染队列
+    render_queue = [] # 渲染队列
+
     for item in items:
         if type(item) == Triangle:
             # 先计算三个顶点的位置
-            A_pos = adapt(cam(item.pos_A))
-            B_pos = adapt(cam(item.pos_B))
-            C_pos = adapt(cam(item.pos_C))
-            # 顶点全部合法才绘制
+            A_pos = Cl2Sc(cam(item.A_pos))
+            B_pos = Cl2Sc(cam(item.B_pos))
+            C_pos = Cl2Sc(cam(item.C_pos))
+            # 顶点全部合法, 则加入队列
             if A_pos and B_pos and C_pos:
-                # 绘制边框
-                if item.line_color:
-                    pygame.draw.aaline(screen, item.line_color, A_pos, B_pos, blend=1)
-                    pygame.draw.aaline(screen, item.line_color, B_pos, C_pos, blend=1)
-                    pygame.draw.aaline(screen, item.line_color, C_pos, A_pos, blend=1)
-                # 填充内部
-                if item.surface_color:
-                    pygame.draw.polygon(screen, item.surface_color, [A_pos, B_pos, C_pos])
+                render_queue.append(SSTriangle(A_pos, B_pos, C_pos, item.color, None))
+
         elif type(item) == Point:
-            # 如果太远了就不绘制了
-            if item.calc_dist([pos_x, pos_y, pos_z]) > 200:
-                continue
             # 先计算点的位置
-            pos = adapt(cam(item.pos))
-            # 在视野内则绘制
+            pos = Cl2Sc(cam(item.pos))
+            # 在视野内则加入队列
             if pos:
-                pygame.draw.circle(screen, item.color, pos, 3)
+                render_queue.append(SSPoint(pos, item.color, None))
+
         elif type(item) == McStyleCube:
             for tri in item.triangles:
                 # 先计算三个顶点在 Screen_Space 的坐标
-                A_pos = adapt(cam(tri.pos_A))
-                B_pos = adapt(cam(tri.pos_B))
-                C_pos = adapt(cam(tri.pos_C))
-                # 顶点全部合法才绘制
+                A_pos = Cl2Sc(cam(tri.A_pos))
+                B_pos = Cl2Sc(cam(tri.B_pos))
+                C_pos = Cl2Sc(cam(tri.C_pos))
+                # 顶点全部合法, 加入渲染队列
                 if A_pos and B_pos and C_pos:
-                    # 绘制边框线
-                    pygame.draw.aaline(screen, tri.line_color, A_pos, B_pos)
-                    pygame.draw.aaline(screen, tri.line_color, B_pos, C_pos)
-                    # 填色
-                    pygame.draw.polygon(screen, tri.surface_color, [A_pos, B_pos, C_pos])
+                    render_queue.append(SSTriangle(A_pos, B_pos, C_pos, tri.color, None))
+
+
+
+    # 渲染队列的SS对象排序
+
+
+
+    # 渲染队列中的SS对象
+    for item in render_queue:
+        if type(item) == SSPoint:
+            pygame.draw.circle(screen, item.color, item.pos, 3)
+        if type(item) == SSLine:
+            pass
+        if type(item) == SSTriangle:
+            pygame.draw.polygon(screen, item.color, (item.A_pos, item.B_pos, item.C_pos))
 
 
 
