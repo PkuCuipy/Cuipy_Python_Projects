@@ -16,7 +16,9 @@ import random
     1. 使用f2i函数, 将float规范为int, 增加兼容性
     2. adapt函数更名为Cl2Sc 表示从Clip_Space([-1,1]x[-1,1])到Screen_Space空间 的坐标伸缩变换
     3. 增加render_queue 并激活camera的返回值'depth', 现在可以按深度顺序渲染了!
-        
+    4. 增加帧率显示
+    5. 增加surface渲染开关, 可以通过"-"键 开启/关闭 "面"的渲染
+    
 """
 
 
@@ -91,6 +93,7 @@ class Line:
         self.A_pos = A_pos
         self.B_pos = B_pos
         self.color = color
+        self.width = width
         self.center_pos = [(A_pos[_] + B_pos[_]) / 2 for _ in range(3)] # 重心
 
 
@@ -179,6 +182,7 @@ GRAY = GREY = (128, 128, 128)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
+BROWN = (90, 70, 42)
 
 # 位置
 pos_x, pos_y, pos_z = -1, -1, 0
@@ -196,10 +200,10 @@ mouse_speed_theta = 0.002
 # 视角大小
 FOV_H = 0.4 * math.pi
 FOV_V = 0.4 * math.pi
-
 # 窗口信息
 WIN_SIZE = 1000, 700
 CAPTION = "3D_Simple_Demo"
+
 
 
 
@@ -218,12 +222,28 @@ for i in range(0, 30):
         items.append(Point([i, j, 0], [255, 255, 255]))
 
 # 生成mc风格方块
-items.append(McStyleCube((10,10,0),WHITE))
-items.append(McStyleCube((10,10,1),GREY))
-items.append(McStyleCube((10,10,2),WHITE))
-items.append(McStyleCube((11,10,0),RED))
-items.append(McStyleCube((10,12,0),GREEN))
-items.append(McStyleCube((10,12,1),BLUE))
+
+# items.append(McStyleCube((10,10,0),WHITE))
+# items.append(McStyleCube((10,10,1),GREY))
+# items.append(McStyleCube((10,10,2),WHITE))
+# items.append(McStyleCube((11,10,0),RED))
+# items.append(McStyleCube((10,12,0),GREEN))
+# items.append(McStyleCube((10,12,1),BLUE))
+
+# 树干
+items.append(McStyleCube((10,10,0), BROWN))
+items.append(McStyleCube((10,10,1), BROWN))
+items.append(McStyleCube((10,10,2), BROWN))
+items.append(McStyleCube((10,10,3), BROWN))
+items.append(McStyleCube((10,10,4), BROWN))
+# 叶子
+items.append(McStyleCube((10,11,3), GREEN))
+items.append(McStyleCube((11,10,3), GREEN))
+items.append(McStyleCube((9,10,3), GREEN))
+items.append(McStyleCube((10,9,3), GREEN))
+
+
+
 
 
 
@@ -252,6 +272,10 @@ pygame.mouse.set_visible(False) # 鼠标不可见
 pygame.mouse.set_pos(f2i(WIN_SIZE[0] / 2), f2i(WIN_SIZE[1] / 2)) # 鼠标初始位置
 CENTER_POS = (WIN_SIZE[0] / 2, WIN_SIZE[1] / 2)
 
+my_font = pygame.font.Font("myfont.otf", 20)# 字体信息
+
+RENDER_SURFACE = True # 是否渲染"面"
+
 while True:
     for event in pygame.event.get():
         if event.type == QUIT:
@@ -261,6 +285,8 @@ while True:
                 print()
                 print(f"当前位置: x={round(pos_x, 3)}, y={round(pos_y, 3)}, z={round(pos_z, 3)}")
                 print(f"视角方向: φ={round(phi / math.pi, 3)}π, θ={round(theta / math.pi, 3)}π")
+            if event.key == K_MINUS:
+                RENDER_SURFACE = not RENDER_SURFACE
 
     # 根据鼠标相对移动 更改视线方向
     current_mouse_pos = pygame.mouse.get_pos()  # 当前鼠标位置
@@ -334,6 +360,7 @@ while True:
     render_queue = [] # 渲染队列
 
     for item in items:
+
         if type(item) == Triangle:
             # 获取camera的返回值
             A_data, B_data, C_data = cam(item.A_pos), cam(item.B_pos), cam(item.C_pos)
@@ -357,6 +384,7 @@ while True:
                 dep = A_data['depth']
                 render_queue.append(SSPoint(pos, item.color, dep))
 
+
         elif type(item) == McStyleCube:
             for tri in item.triangles:
                 # 获取camera的返回值
@@ -371,6 +399,9 @@ while True:
                     average_depth = (A_data['depth'] + B_data['depth'] + C_data['depth']) / 3
                     # 推入队列
                     render_queue.append(SSTriangle(A_pos, B_pos, C_pos, tri.color, average_depth))
+                    render_queue.append(SSLine(A_pos, B_pos, WHITE, (A_data['depth'] + B_data['depth']) / 2))
+                    render_queue.append(SSLine(B_pos, C_pos, WHITE, (B_data['depth'] + C_data['depth']) / 2))
+
 
 
 
@@ -383,11 +414,17 @@ while True:
         if type(item) == SSPoint:
             pygame.draw.circle(screen, item.color, item.pos, 3)
         if type(item) == SSLine:
-            pass
-        if type(item) == SSTriangle:
+            pygame.draw.aaline(screen, item.color, item.A_pos, item.B_pos)
+        if type(item) == SSTriangle and RENDER_SURFACE:
             pygame.draw.polygon(screen, item.color, (item.A_pos, item.B_pos, item.C_pos))
+            pass
 
 
+    # 屏幕左上角打印帧率
+    fps_text = my_font.render(str(int(clock.get_fps() + 0.5)), True, WHITE)
+    help_text = my_font.render("              \"W/S/A/D\"; \"C\"; \"=\"; \"-\";  ", True, WHITE)
+    screen.blit(fps_text, (10, 10))
+    screen.blit(help_text, (10, 10))
 
 
     pygame.display.flip()
