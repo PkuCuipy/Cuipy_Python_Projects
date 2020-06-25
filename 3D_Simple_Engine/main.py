@@ -15,8 +15,8 @@ import random
 [6.25]
     1. 使用f2i函数, 将float规范为int, 增加兼容性
     2. adapt函数更名为Cl2Sc 表示从Clip_Space([-1,1]x[-1,1])到Screen_Space空间 的坐标伸缩变换
-    
-    
+    3. 增加render_queue 并激活camera的返回值'depth', 现在可以按深度顺序渲染了!
+        
 """
 
 
@@ -62,12 +62,12 @@ def get_camera(position, target, fov_h=0.4 * math.pi, fov_v=0.4 * math.pi):
         #     # print(round(u_), round(v_), "（超出视野）")
         #     return None
 
-        # 超出视野"过多(>5)",则返回None
-        if abs(u_) > 5 or abs(v_) > 5:
+        # 超出视野"过多(>10)",则返回None
+        if abs(u_) > 10 or abs(v_) > 10:
             # print(round(u_), round(v_), "（超出视野）")
             return None
 
-        return u_, v_
+        return {'pos': (u_, v_), 'depth': depth}
 
     return camera
 
@@ -335,35 +335,47 @@ while True:
 
     for item in items:
         if type(item) == Triangle:
-            # 先计算三个顶点的位置
-            A_pos = Cl2Sc(cam(item.A_pos))
-            B_pos = Cl2Sc(cam(item.B_pos))
-            C_pos = Cl2Sc(cam(item.C_pos))
-            # 顶点全部合法, 则加入队列
-            if A_pos and B_pos and C_pos:
-                render_queue.append(SSTriangle(A_pos, B_pos, C_pos, item.color, None))
+            # 获取camera的返回值
+            A_data, B_data, C_data = cam(item.A_pos), cam(item.B_pos), cam(item.C_pos)
+            # 三个顶点的返回值全部合法, 则加入队列
+            if A_data and B_data and C_data:
+                render_queue.append(SSTriangle(A_pos, B_pos, C_pos, item.color, average_depth))
+                # 计算三个顶点的SS坐标
+                A_pos = Cl2Sc(A_data['pos'])
+                B_pos = Cl2Sc(B_data['pos'])
+                C_pos = Cl2Sc(C_data['pos'])
+                # 计算三个顶点的深度信息, 取平均, 代表整个三角形的深度信息
+                average_depth = (A_data['depth'] + B_data['depth'] + C_data['depth']) / 3
+
 
         elif type(item) == Point:
-            # 先计算点的位置
-            pos = Cl2Sc(cam(item.pos))
-            # 在视野内则加入队列
-            if pos:
-                render_queue.append(SSPoint(pos, item.color, None))
+            # 获取camera的返回值
+            A_data = cam(item.pos)
+            if A_data: # 返回值有效
+                # 计算点的位置
+                pos = Cl2Sc(A_data['pos'])
+                dep = A_data['depth']
+                render_queue.append(SSPoint(pos, item.color, dep))
 
         elif type(item) == McStyleCube:
             for tri in item.triangles:
-                # 先计算三个顶点在 Screen_Space 的坐标
-                A_pos = Cl2Sc(cam(tri.A_pos))
-                B_pos = Cl2Sc(cam(tri.B_pos))
-                C_pos = Cl2Sc(cam(tri.C_pos))
+                # 获取camera的返回值
+                A_data, B_data, C_data = cam(tri.A_pos), cam(tri.B_pos), cam(tri.C_pos)
                 # 顶点全部合法, 加入渲染队列
-                if A_pos and B_pos and C_pos:
-                    render_queue.append(SSTriangle(A_pos, B_pos, C_pos, tri.color, None))
+                if A_data and B_data and C_data:
+                    # 计算三个顶点的SS坐标
+                    A_pos = Cl2Sc(A_data['pos'])
+                    B_pos = Cl2Sc(B_data['pos'])
+                    C_pos = Cl2Sc(C_data['pos'])
+                    # 计算三个顶点的深度信息, 取平均, 代表整个三角形的深度信息
+                    average_depth = (A_data['depth'] + B_data['depth'] + C_data['depth']) / 3
+                    # 推入队列
+                    render_queue.append(SSTriangle(A_pos, B_pos, C_pos, tri.color, average_depth))
 
 
 
     # 渲染队列的SS对象排序
-
+    render_queue.sort(key=lambda x: x.depth, reverse=True)
 
 
     # 渲染队列中的SS对象
