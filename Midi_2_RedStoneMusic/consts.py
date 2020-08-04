@@ -7,7 +7,7 @@
 
 # ====== 可调整部分 ======
 # function文件夹
-FUNCTION_FOLDER = "/Users/cuipy/Library/Application Support/minecraft/saves/RSM_20200804/datapacks/rsm/data/rsm/functions/"
+FUNCTION_FOLDER = "填入你自己的地址!/minecraft/saves/存档名/datapacks/rsm/data/rsm/functions/" # 这里你需要一些前置准备, 我想起来再补充吧, 太晚了想睡觉了w
 
 # 设置"建造原点"坐标, 默认为(0,64,0)
 X = 0
