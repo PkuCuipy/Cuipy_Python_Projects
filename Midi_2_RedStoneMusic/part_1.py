@@ -21,7 +21,7 @@ midi_data = pretty_midi.PrettyMIDI(midi_file_name)
 
 
 # 一对一对地(L 和 R)遍历.midi文件的所有channel
-for instrument_idx in range(0, round(len(midi_data.instruments) / 2)):
+for instrument_idx in range(0, int(len(midi_data.instruments) / 2)):
 
     # 存储当前乐器 [左/右声道] 的所有 [小节(Bar类的类实例)] 的 [列表(list)] 组成的字典(用字典只是为了LR共用代码)
     bars = dict()
