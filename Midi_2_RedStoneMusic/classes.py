@@ -1,18 +1,20 @@
 
+
+
 class Note:
-    def __init__(self, bar, which, qpos, spos, pitch, channel, is_drums, drum_name):
+    def __init__(self, bar, which, qpos, spos, pitch, instrument, is_drums, drum_name):
         # 设置bar和which是为了直观表示某个音符的"时间轴位置"
         # 设置qpos和spos是为了方便后面计算"world位置"...
         self.bar = bar      # 第几个"小节"                           从0开始
         self.which = which  # 该小节的第几个"16分音符"                从0到3
         self.qpos = qpos    # 该小节的第几个"4分音符(quarter)"        从0到3
         self.spos = spos    # 该4分音符的第几个"16分音符(semiquaver)"  从0到3
-        self.pitch = pitch  # 音符的音高                  mc支持的音高范围是很窄的
-        self.channel = channel   # 该音符对应乐器
+        self.pitch = pitch  # 音符的标准绝对音高                      不是mc的[0,24]那个
+        self.instrument = instrument   # 该音符对应乐器名
         self.is_drums = is_drums
         self.drum_name = drum_name
     def __repr__(self):
-        return f"Note({self.channel}-{self.bar}-{self.qpos}-{self.spos}: {self.pitch})"
+        return f"Note({self.instrument}-{self.bar}-{self.qpos}-{self.spos}: {self.pitch})"
 
 
 class Beat: # (1Beat = 1四分音符)
