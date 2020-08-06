@@ -17,7 +17,7 @@ X, Y, Z = 0, 64, 0
 BAR_AMOUNT = 99
 
 # 待读取的midi文件名(.mid后缀不可省略)
-MIDI_FILE_NAME = "示例(曹操-林俊杰).mid"
+MIDI_FILE_NAME = "示例(曹操-林俊杰).mid.mid"
 
 # 改成[你自己的]Minecraft存档的路径(最后 不要 加上"/")
 # 强调: 这里是我自己的游戏路径, 请改成你自己的
