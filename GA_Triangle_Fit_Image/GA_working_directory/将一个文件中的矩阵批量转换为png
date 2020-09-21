@@ -1,0 +1,18 @@
+import numpy as np
+from PIL import Image
+import os
+
+mat_directory = "/Users/cuipy/Desktop/GA_working_directory/mat/"
+target_directory = "/Users/cuipy/Desktop/GA_working_directory/imaged/"
+HEIGHT = 200
+WIDTH = 300
+
+file_list = os.listdir(mat_directory) #列出文件夹下所有的目录与文件
+for file in file_list:
+    file_path = mat_directory + file
+    try:
+        test_read = np.fromfile(file_path, dtype='int16')    # 读取
+        Image.fromarray(test_read.astype('uint8').reshape(HEIGHT,WIDTH, 4)).save(target_directory + file + ".png")  # 把读取的东西画出来
+        print("成功处理" + file_path)
+    except Exception as reason:
+        print("EXCEPTION OCCURRED   " + reason.__str__() + file_path)
